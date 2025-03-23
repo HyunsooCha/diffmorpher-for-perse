@@ -16,7 +16,6 @@ def calc_mean_std(feat, eps=1e-5):
         feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
     return feat_mean, feat_std
 
-
 def get_img(img, resolution=512):
     norm_mean = [0.5, 0.5, 0.5]
     norm_std = [0.5, 0.5, 0.5]
