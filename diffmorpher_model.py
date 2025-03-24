@@ -15,10 +15,10 @@ from diffusers import StableDiffusionPipeline
 from argparse import ArgumentParser
 import inspect
 import sys
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from utils.model_utils import get_img, slerp, do_replace_attn
-from utils.lora_utils import train_lora, load_lora, train_lora_from_images
-from utils.alpha_scheduler import AlphaScheduler
+sys.path.append(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'utils'))
+from model_utils import get_img, slerp, do_replace_attn
+from lora_utils import train_lora, load_lora, train_lora_from_images
+from alpha_scheduler import AlphaScheduler
 
 
 class StoreProcessor():
@@ -106,6 +106,7 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
                  feature_extractor: CLIPImageProcessor,
                  image_encoder=None,
                  requires_safety_checker: bool = True,
+                 verbose: bool = False,
                  ):
         sig = inspect.signature(super().__init__)
         params = sig.parameters
@@ -117,6 +118,7 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
                              safety_checker, feature_extractor, requires_safety_checker)
         self.img0_dict = dict()
         self.img1_dict = dict()
+        self.verbose = verbose
 
     def inv_step(
         self,
@@ -174,7 +176,8 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
             return_tensors="pt"
         )
         text_embeddings = self.text_encoder(text_input.input_ids.to(DEVICE))[0]
-        print("input text embeddings :", text_embeddings.shape)
+        if self.verbose:
+            print("input text embeddings :", text_embeddings.shape)
         # define initial latents
         latents = self.image2latent(image)
 
@@ -192,10 +195,12 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
             text_embeddings = torch.cat(
                 [unconditional_embeddings, text_embeddings], dim=0)
 
-        print("latents shape: ", latents.shape)
+        if self.verbose:
+            print("latents shape: ", latents.shape)
         # interative sampling
         self.scheduler.set_timesteps(num_inference_steps)
-        print("Valid timesteps: ", reversed(self.scheduler.timesteps))
+        if self.verbose:
+            print("Valid timesteps: ", reversed(self.scheduler.timesteps))
         # print("attributes: ", self.scheduler.__dict__)
         latents_list = [latents]
         pred_x0_list = [latents]
@@ -452,7 +457,8 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
             img_1 = Image.fromarray(img_1).convert("RGB")
 
         if self.use_lora:
-            print("Loading lora...")
+            if self.verbose:
+                print("Loading lora...")
             if not load_lora_path_0:
 
                 weight_name = f"{output_path.split('/')[-1]}_lora_0.ckpt"
@@ -460,7 +466,8 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
                 if not os.path.exists(load_lora_path_0):
                     train_lora(img_0, prompt_0, save_lora_dir, None, self.tokenizer, self.text_encoder,
                                self.vae, self.unet, self.scheduler, lora_steps, lora_lr, lora_rank, weight_name=weight_name)
-            print(f"Load from {load_lora_path_0}.")
+            if self.verbose:
+                print(f"Load from {load_lora_path_0}.")
             if load_lora_path_0.endswith(".safetensors"):
                 lora_0 = safetensors.torch.load_file(
                     load_lora_path_0, device="cpu")
@@ -473,7 +480,8 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
                 if not os.path.exists(load_lora_path_1):
                     train_lora(img_1, prompt_1, save_lora_dir, None, self.tokenizer, self.text_encoder,
                                self.vae, self.unet, self.scheduler, lora_steps, lora_lr, lora_rank, weight_name=weight_name)
-            print(f"Load from {load_lora_path_1}.")
+            if self.verbose:
+                print(f"Load from {load_lora_path_1}.")
             if load_lora_path_1.endswith(".safetensors"):
                 lora_1 = safetensors.torch.load_file(
                     load_lora_path_1, device="cpu")
@@ -498,7 +506,8 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
         img_noise_1 = self.ddim_inversion(
             self.image2latent(img_1), text_embeddings_1)
 
-        print("latents shape: ", img_noise_0.shape)
+        if self.verbose:
+            print("latents shape: ", img_noise_0.shape)
 
         original_processor = list(self.unet.attn_processors.values())[0]
 
@@ -648,19 +657,18 @@ class MultiDiffMorpherPipeline(StableDiffusionPipeline):
         with torch.no_grad():
             if self.use_reschedule:
                 alpha_scheduler = AlphaScheduler()
-                # alpha_list = list(torch.linspace(0, 1, num_frames))
                 images_pt = morph(alpha_list, progress, "Sampling...")
                 images_pt = [transforms.ToTensor()(img).unsqueeze(0)
                              for img in images_pt]
                 alpha_scheduler.from_imgs(images_pt)
                 alpha_list = alpha_scheduler.get_list()
-                print(alpha_list)
+                if self.verbose:
+                    print(alpha_list)
                 images = morph(alpha_list, progress, "Reschedule...")
             else:
                 # alpha_list = list(torch.linspace(0, 1, num_frames))
                 # alpha_list = list(torch.tensor([0, alpha, 1]))
                 # alpha_list = list(torch.tensor([0, 0.5, 1]))
-                # select the center alpha list
                 images = morph(alpha_list, progress, "Sampling...")
 
         return images

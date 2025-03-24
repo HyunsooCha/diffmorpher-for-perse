@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from argparse import ArgumentParser
-from model import DiffMorpherPipeline
+from diffmorpher_model import DiffMorpherPipeline
 
 parser = ArgumentParser()
 parser.add_argument(

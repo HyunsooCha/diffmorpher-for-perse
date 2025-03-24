@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from argparse import ArgumentParser
-from model import MultiDiffMorpherPipeline
+from diffmorpher_model import MultiDiffMorpherPipeline
 import csv
 from natsort import natsorted
 from itertools import combinations
@@ -71,11 +71,14 @@ def main(args, pipeline):
 
     for dataset in dataset_list:
         dataset_path = os.path.join(args.dataset_path, dataset)
+        if os.path.exists(os.path.join(dataset_path, 'lora_{}.ckpt'.format(args.lora_epochs))):
+            print('LoRA already exists:', dataset_path)
+            continue
         print('Processing:', dataset_path)
         pipeline.train_lora_from_images_in_dataset(dataset_path=dataset_path,
                                                    prompt="",
                                                    save_lora_dir=dataset_path,
-                                                   lora_epochs=5,
+                                                   lora_epochs=args.lora_epochs,
                                                    lora_lr=2e-4,
                                                    lora_rank=16,
                                                    batch_size=8,
@@ -129,6 +132,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--end_idx", type=int, default=0,
         help="End index of the dataset (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--lora_epochs", type=int, default=5,
+        help="Number of epochs for LoRA training (default: %(default)s)"
     )
     args = parser.parse_args()
 
